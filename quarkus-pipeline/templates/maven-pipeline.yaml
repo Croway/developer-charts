@@ -16,7 +16,18 @@ spec:
       name: git-revision
       type: string
       description: "component source Git revision"
-    - default: ./src/main/docker/Dockerfile
+    {{- if eq .Values.deployment "jvm" }}
+    - default: ./src/main/docker/Dockerfile.jvm
+    {{- end }}
+    {{- if eq .Values.deployment "native" }}
+    - default: ./src/main/docker/Dockerfile.native
+    {{- end }}
+    {{- if eq .Values.deployment "legacy-jar" }}
+    - default: ./src/main/docker/Dockerfile.legacy-jar
+    {{- end }}
+    {{- if eq .Values.deployment "native-micro" }}
+    - default: ./src/main/docker/Dockerfile.native-micro
+    {{- end }}
       name: dockerfilePath
       type: string
       description: "path to Dockerfile"
@@ -57,6 +68,30 @@ spec:
     - name: maven-settings
       workspace: maven-settings
 
+  {{- if or (eq .Values.deployment "native") (eq .Values.deployment "native-micro") }}
+  - name: package-and-build-container-image
+    taskRef:
+      name: maven
+      kind: ClusterTask
+    runAfter: ["build"]
+    params:
+    - name: GOALS
+      value: 
+        - package
+        - -DskipTests
+        - -Dquarkus.jib.base-jvm-image=registry.access.redhat.com/ubi8/openjdk-21
+        - -Dquarkus.container-image.insecure=true
+        - -Dquarkus.native.container-build=true
+        - -Dquarkus.container-image.build=true
+        - -Dquarkus.container-image.image=$(params.image):$(params.version)
+        - -Dquarkus.container-image.builder=jib
+    workspaces:
+    - name: source
+      workspace: maven-repo
+    - name: maven-settings
+      workspace: maven-settings
+  {{ end }}
+  {{- if or (eq .Values.deployment "jvm") (eq .Values.deployment "legacy-jar") }}
   - name: package
     taskRef:
       name: maven
@@ -86,3 +121,4 @@ spec:
       value: $(params.image):$(params.version)
     - name: DOCKERFILE
       value: $(params.dockerfilePath)
+  {{ end }}
